@@ -332,6 +332,11 @@ def screen_dcf(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10,
         if dcf["fcf"] <= 0:
             continue
 
+        # ROE = 당기순이익 / 자기자본(총자산 - 총부채)
+        equity = (s.get("total_assets") or 0) - (s.get("total_debt") or 0)
+        net_income = s.get("net_income") or 0
+        roe = net_income / equity if equity > 0 and net_income else None
+
         results.append({
             "stock_code": stock_code,
             "name": s["name"],
@@ -343,6 +348,8 @@ def screen_dcf(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10,
             "current_price": dcf["current_price"],
             "upside": dcf["upside"],
             "fcf_method": dcf["fcf_method"],
+            "per": s.get("per"),
+            "roe": round(roe, 4) if roe is not None else None,
         })
 
     # upside 높은 순 정렬
@@ -355,18 +362,21 @@ def print_dcf_screen(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
     results = screen_dcf(bsns_year, top_n=top_n, growth_rate=growth_rate,
                          wacc=wacc)
 
-    print(f"\n{'='*100}")
+    print(f"\n{'='*120}")
     print(f" DCF Top {top_n} — {bsns_year} (growth={growth_rate:.0%}, WACC={wacc:.0%})")
-    print(f"{'='*100}")
+    print(f"{'='*120}")
     print(f"{'순위':>4} {'종목코드':>8} {'종목명':<16} {'매출(억)':>10} {'영업이익(억)':>12} "
-          f"{'FCF(억)':>10} {'적정가':>10} {'현재가':>10} {'괴리율':>8}")
-    print("-" * 100)
+          f"{'FCF(억)':>10} {'적정가':>10} {'현재가':>10} {'괴리율':>8} {'PER':>8} {'ROE':>8}")
+    print("-" * 120)
 
     for i, r in enumerate(results, 1):
+        per_str = f"{r['per']:.1f}" if r.get('per') else "-"
+        roe_str = f"{r['roe']:.1%}" if r.get('roe') else "-"
         print(f"{i:>4} {r['stock_code']:>8} {r['name']:<16} "
               f"{r['revenue']/1e8:>10,.0f} {r['operating_income']/1e8:>12,.0f} "
               f"{r['fcf']/1e8:>10,.0f} {r['dcf_price']:>10,.0f} "
-              f"{r['current_price']:>10,.0f} {r['upside']:>8.1%}")
+              f"{r['current_price']:>10,.0f} {r['upside']:>8.1%} "
+              f"{per_str:>8} {roe_str:>8}")
 
 
 def save_dcf_screen_md(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
@@ -379,15 +389,18 @@ def save_dcf_screen_md(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
         f"",
         f"> 가정: 성장률 {growth_rate:.0%}, WACC {wacc:.0%}, 영구성장률 2%, 예측기간 5년",
         f"",
-        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | FCF(억) | 적정가 | 현재가 | 괴리율 |",
-        "|-----:|:------:|:------|--------:|-----------:|-------:|------:|------:|------:|",
+        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | FCF(억) | 적정가 | 현재가 | 괴리율 | PER | ROE |",
+        "|-----:|:------:|:------|--------:|-----------:|-------:|------:|------:|------:|----:|----:|",
     ]
     for i, r in enumerate(results, 1):
+        per_str = f"{r['per']:.1f}" if r.get('per') else "-"
+        roe_str = f"{r['roe']:.1%}" if r.get('roe') else "-"
         lines.append(
             f"| {i} | {r['stock_code']} | {r['name']} "
             f"| {r['revenue']/1e8:,.0f} | {r['operating_income']/1e8:,.0f} "
             f"| {r['fcf']/1e8:,.0f} | {r['dcf_price']:,.0f} "
-            f"| {r['current_price']:,.0f} | {r['upside']:.1%} |"
+            f"| {r['current_price']:,.0f} | {r['upside']:.1%} "
+            f"| {per_str} | {roe_str} |"
         )
 
     path = os.path.join(os.path.dirname(__file__), f"dcf_{bsns_year}.md")
