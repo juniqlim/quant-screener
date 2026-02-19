@@ -200,6 +200,11 @@ def load_stocks_from_db(bsns_year, db_path=DB_PATH):
             continue
         if any(kw in name for kw in FINANCIAL_NAME_KEYWORDS):
             continue
+        # ROE = 당기순이익 / 자기자본(총자산 - 총부채)
+        equity = (r["total_assets"] or 0) - (r["total_debt"] or 0)
+        net_income = r["net_income"] or 0
+        roe = net_income / equity if equity > 0 and net_income else None
+
         stocks.append({
             "stock_code": r["stock_code"],
             "name": r["name"],
@@ -211,6 +216,8 @@ def load_stocks_from_db(bsns_year, db_path=DB_PATH):
             "market_cap": r["market_cap"],
             "total_debt": r["total_debt"] or 0,
             "revenue": r["revenue"] or 0,
+            "per": r["per"],
+            "roe": round(roe, 4) if roe is not None else None,
         })
     return stocks
 
@@ -224,13 +231,44 @@ def print_magic_formula(bsns_year, top_n=30):
     print(f" Magic Formula Top {top_n} — {bsns_year}")
     print(f"{'='*80}")
     print(f"{'순위':>4} {'종목명':<16} {'매출(억)':>10} {'영업이익(억)':>12} "
-          f"{'ROIC':>8} {'EY':>8} {'합산':>6}")
-    print("-" * 80)
+          f"{'ROIC':>8} {'EY':>8} {'합산':>6} {'PER':>8} {'ROE':>8}")
+    print("-" * 100)
 
     for i, s in enumerate(ranked[:top_n], 1):
+        per_str = f"{s['per']:.1f}" if s.get('per') else "-"
+        roe_str = f"{s['roe']:.1%}" if s.get('roe') is not None else "-"
         print(f"{i:>4} {s['name']:<16} {s.get('revenue',0)/1e8:>10,.0f} "
               f"{s['ebit']/1e8:>12,.0f} {s['roic']:>8.1%} "
-              f"{s['earnings_yield']:>8.1%} {s['magic_rank']:>6}")
+              f"{s['earnings_yield']:>8.1%} {s['magic_rank']:>6} "
+              f"{per_str:>8} {roe_str:>8}")
+
+
+def save_magic_formula_md(bsns_year, top_n=50):
+    """마법공식 상위 종목을 마크다운 파일로 저장."""
+    stocks = load_stocks_from_db(bsns_year)
+    ranked = rank_stocks(stocks)
+
+    lines = [
+        f"# Magic Formula Top {top_n} — {bsns_year}",
+        f"",
+        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | ROIC | EY | 합산 | PER | ROE |",
+        "|-----:|:------:|:------|--------:|-----------:|-----:|---:|-----:|----:|----:|",
+    ]
+    for i, s in enumerate(ranked[:top_n], 1):
+        per_str = f"{s['per']:.1f}" if s.get('per') else "-"
+        roe_str = f"{s['roe']:.1%}" if s.get('roe') is not None else "-"
+        lines.append(
+            f"| {i} | {s['stock_code']} | {s['name']} "
+            f"| {s.get('revenue',0)/1e8:,.0f} | {s['ebit']/1e8:,.0f} "
+            f"| {s['roic']:.1%} | {s['earnings_yield']:.1%} | {s['magic_rank']} "
+            f"| {per_str} | {roe_str} |"
+        )
+
+    path = os.path.join(os.path.dirname(__file__), f"magic_formula_{bsns_year}.md")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"저장: {path}")
+    return path
 
 
 def load_stock_financials(stock_code, bsns_year, db_path=DB_PATH):
@@ -424,3 +462,4 @@ if __name__ == "__main__":
     else:
         year = sys.argv[1] if len(sys.argv) > 1 else "2024"
         print_magic_formula(year)
+        save_magic_formula_md(year)
