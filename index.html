@@ -21,14 +21,25 @@ th { background: #f9f9f9; position: sticky; top: 0; }
 td:nth-child(3), th:nth-child(3) { text-align: left; }
 tr:hover { background: #f0f7ff; }
 .note { margin-top: 12px; font-size: 13px; color: #666; }
-a.sl { color: #333; text-decoration: none; }
-a.sl:hover { text-decoration: underline; }
+a.sl { color: #2563eb; text-decoration: underline; }
+a.sl:hover { color: #1d4ed8; }
 .pos { color: #c0392b; }
+.filters { display: flex; align-items: center; gap: 16px; padding: 12px 0; font-size: 14px; }
+.toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.toggle input { width: 16px; height: 16px; cursor: pointer; }
+.formulas { margin-top: 32px; padding: 20px; background: #fff; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; line-height: 1.8; }
+.formulas h2 { font-size: 16px; margin-bottom: 12px; }
+.formulas h3 { font-size: 14px; margin-top: 16px; margin-bottom: 4px; color: #555; }
+.formulas code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="container">
 <h1>KR 퀀트 스크리너</h1>
+
+<div class="filters">
+  <label class="toggle"><input type="checkbox" id="hideHolding" checked> 지주사 제외</label>
+</div>
 
 <div class="tabs">
   <div class="tab active" data-t="dcf25">DCF 2025</div>
@@ -69,11 +80,25 @@ a.sl:hover { text-decoration: underline; }
   <p class="note">2024년 사업보고서 기준</p>
 </div>
 
+<div class="formulas">
+  <h2>공식 요약</h2>
+  <h3>DCF (Discounted Cash Flow)</h3>
+  <code>FCF = 영업활동현금흐름 - CAPEX</code><br>
+  <code>적정가 = (미래 FCF의 현재가치 합 + 잔존가치) - 부채 + 현금) / 발행주식수</code><br>
+  <code>괴리율 = (적정가 - 현재가) / 현재가</code>
+  <h3>Magic Formula (조엘 그린블라트)</h3>
+  <code>ROIC = EBIT / 투하자본</code> (투하자본 = 유동자산 - 유동부채 - 현금 + 유형자산)<br>
+  <code>EY = EBIT / EV</code> (EV = 시가총액 + 부채 - 현금)<br>
+  <code>순위 = ROIC 순위 + EY 순위</code> (낮을수록 상위)
+</div>
+
 </div>
 
 <script>
 const N = n => Number(n).toLocaleString();
 const U = c => `https://m.stock.naver.com/domestic/stock/${c}/total`;
+const HK = ["홀딩스","홀딩","지주"];
+const isHolding = name => HK.some(k => name.includes(k));
 
 const dcf25=[
 ["003070","코오롱글로벌",6074,277,5935,266381,6710,"3870.2%"],
@@ -126,6 +151,8 @@ const dcf25=[
 ["154040","다산솔루에타",87,4,73,4491,1200,"274.2%"],
 ["003650","미창석유공업",1060,78,462,396974,106500,"272.8%"],
 ["088910","동우팜투테이블",883,31,172,7999,2165,"269.5%"],
+["005820","원림",210,14,87,51467,14040,"266.6%"],
+["126640","화신정공",876,3,136,4669,1301,"258.8%"],
 ];
 
 const dcf24=[
@@ -179,6 +206,11 @@ const dcf24=[
 ["201490","미투온",943,118,205,9341,1790,"421.9%"],
 ["060380","동양에스텍",1910,32,135,7258,1391,"421.8%"],
 ["264450","유비쿼스",1038,124,384,41167,8000,"414.6%"],
+["100790","미래에셋벤처투자",2339,157,1292,23544,4580,"414.1%"],
+["402340","SK스퀘어",19066,39126,37835,398887,79300,"403.0%"],
+["272450","진에어",14613,1631,2322,47831,9620,"397.2%"],
+["038680","에스넷",4499,107,326,19633,3950,"397.0%"],
+["004970","신라교역",4961,164,501,45130,9390,"380.6%"],
 ];
 
 const mf25=[
@@ -247,22 +279,35 @@ const mf24=[
 ["198080","캐프",3149,200,"43.9%","21.3%",205],
 ];
 
+function filterData(data) {
+  if (!document.getElementById('hideHolding').checked) return data;
+  return data.filter(r => !isHolding(r[1]));
+}
+
 function renderDcf(id, data) {
-  document.getElementById(id).innerHTML = data.map((r,i) =>
+  const filtered = filterData(data);
+  document.getElementById(id).innerHTML = filtered.map((r,i) =>
     `<tr><td>${i+1}</td><td><a class="sl" href="${U(r[0])}" target="_blank">${r[0]}</a></td><td>${r[1]}</td><td>${N(r[2])}</td><td>${N(r[3])}</td><td>${N(r[4])}</td><td>${N(r[5])}</td><td>${N(r[6])}</td><td class="pos">${r[7]}</td></tr>`
   ).join('');
 }
 
 function renderMf(id, data) {
-  document.getElementById(id).innerHTML = data.map((r,i) =>
+  const filtered = filterData(data);
+  document.getElementById(id).innerHTML = filtered.map((r,i) =>
     `<tr><td>${i+1}</td><td><a class="sl" href="${U(r[0])}" target="_blank">${r[0]}</a></td><td>${r[1]}</td><td>${N(r[2])}</td><td>${N(r[3])}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td></tr>`
   ).join('');
 }
 
-renderDcf('tb-dcf25', dcf25);
-renderDcf('tb-dcf24', dcf24);
-renderMf('tb-mf25', mf25);
-renderMf('tb-mf24', mf24);
+function renderAll() {
+  renderDcf('tb-dcf25', dcf25);
+  renderDcf('tb-dcf24', dcf24);
+  renderMf('tb-mf25', mf25);
+  renderMf('tb-mf24', mf24);
+}
+
+renderAll();
+
+document.getElementById('hideHolding').addEventListener('change', renderAll);
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', function() {
