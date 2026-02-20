@@ -30,7 +30,29 @@ EXTRA_FINANCIAL_COLUMNS = {
     "net_income_yoy": "REAL",
     "op_income_qoq": "REAL",
     "net_income_qoq": "REAL",
+    "quarterly_revenue": "INTEGER",
+    "quarterly_ocf": "INTEGER",
+    "quarterly_capex": "INTEGER",
+    "price_volatility": "REAL",
+    "retained_earnings": "INTEGER",
 }
+
+
+def calc_volatility(prices):
+    """일별 종가 리스트 → 연환산 변동성 (표준편차 * sqrt(252))."""
+    if not prices or len(prices) < 2:
+        return None
+    returns = []
+    for i in range(1, len(prices)):
+        if prices[i - 1] == 0:
+            continue
+        returns.append((prices[i] - prices[i - 1]) / prices[i - 1])
+    if not returns:
+        return None
+    n = len(returns)
+    mean = sum(returns) / n
+    variance = sum((r - mean) ** 2 for r in returns) / n
+    return math.sqrt(variance) * math.sqrt(252)
 
 
 def get_api_key():
@@ -390,12 +412,22 @@ def fetch_detail_accounts(dart, stock_code, bsns_year, reprt_code="11011"):
             detail["short_term_borrowings"] = amt
         elif acnt == "장기차입금" and sj == "재무상태표":
             detail["long_term_borrowings"] = amt
+        elif acnt == "이익잉여금" and sj == "재무상태표":
+            detail.setdefault("retained_earnings", amt)
+        elif acnt == "매출액" and sj in ("손익계산서", "포괄손익계산서"):
+            detail.setdefault("quarterly_revenue", amt)
 
     if "short_term_borrowings" in detail or "long_term_borrowings" in detail:
         detail["borrowings"] = (
             detail.get("short_term_borrowings", 0)
             + detail.get("long_term_borrowings", 0)
         )
+
+    # 분기 OCF/CAPEX: finstate_all에서 추출한 값을 그대로 사용
+    if "operating_cash_flow" in detail:
+        detail.setdefault("quarterly_ocf", detail["operating_cash_flow"])
+    if "capex" in detail:
+        detail.setdefault("quarterly_capex", detail["capex"])
 
     return detail
 
@@ -410,8 +442,9 @@ def save_financials(conn, bsns_year, financials_data):
                 cash, tangible_assets, total_debt,
                 operating_cash_flow, depreciation, capex, tax_expense, interest_expense,
                 gross_profit, net_income, short_term_borrowings, long_term_borrowings,
-                op_income_yoy, net_income_yoy, op_income_qoq, net_income_qoq
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                op_income_yoy, net_income_yoy, op_income_qoq, net_income_qoq,
+                quarterly_revenue, quarterly_ocf, quarterly_capex, retained_earnings
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stock_code, bsns_year) DO UPDATE SET
                 revenue=excluded.revenue,
                 operating_income=excluded.operating_income,
@@ -433,7 +466,11 @@ def save_financials(conn, bsns_year, financials_data):
                 op_income_yoy=excluded.op_income_yoy,
                 net_income_yoy=excluded.net_income_yoy,
                 op_income_qoq=excluded.op_income_qoq,
-                net_income_qoq=excluded.net_income_qoq
+                net_income_qoq=excluded.net_income_qoq,
+                quarterly_revenue=excluded.quarterly_revenue,
+                quarterly_ocf=excluded.quarterly_ocf,
+                quarterly_capex=excluded.quarterly_capex,
+                retained_earnings=excluded.retained_earnings
         """, (
             stock_code, bsns_year,
             info.get("revenue", 0), info.get("operating_income", 0),
@@ -447,9 +484,38 @@ def save_financials(conn, bsns_year, financials_data):
             info.get("short_term_borrowings", 0), info.get("long_term_borrowings", 0),
             info.get("op_income_yoy"), info.get("net_income_yoy"),
             info.get("op_income_qoq"), info.get("net_income_qoq"),
+            info.get("quarterly_revenue"), info.get("quarterly_ocf"),
+            info.get("quarterly_capex"), info.get("retained_earnings"),
         ))
     conn.commit()
     print(f"  → {len(financials_data)}개 재무데이터 저장 ({bsns_year})")
+
+
+def fetch_and_save_volatility(conn, bsns_year, targets):
+    """pykrx로 종목별 1년간 일별 종가 → 연환산 변동성 계산 후 DB 저장."""
+    start = f"{bsns_year}0101"
+    end = f"{bsns_year}1231"
+    saved = 0
+    for i, sc in enumerate(targets):
+        try:
+            df = krx.get_market_ohlcv(start, end, sc)
+            if df is None or df.empty:
+                continue
+            prices = df["종가"].tolist()
+            vol = calc_volatility(prices)
+            if vol is not None:
+                conn.execute("""
+                    UPDATE financials SET price_volatility = ?
+                    WHERE stock_code = ? AND bsns_year = ?
+                """, (vol, sc, bsns_year))
+                saved += 1
+        except Exception:
+            pass
+        if (i + 1) % 100 == 0:
+            print(f"    변동성 {i+1}/{len(targets)} ({saved}개 저장)")
+        time.sleep(0.2)
+    conn.commit()
+    print(f"  → {saved}개 변동성 저장 ({bsns_year})")
 
 
 def run(years=None, limit=None):
@@ -533,6 +599,10 @@ def run(years=None, limit=None):
 
         save_financials(conn, year, all_data)
         print(f"  최종: {len(all_data)}개 성공, {errors}개 실패")
+
+        # 4) 변동성 수집
+        print(f"[4] 주가 변동성 수집 ({year}, {len(targets)}개 종목)...")
+        fetch_and_save_volatility(conn, year, targets)
 
     conn.close()
     print("\n완료!")

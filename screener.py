@@ -8,6 +8,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "magic_formula.db")
 # 금융업종 키워드 — sector 또는 종목명에서 필터
 FINANCIAL_SECTORS = {"은행", "증권", "보험", "카드", "캐피탈", "저축은행", "금융"}
 FINANCIAL_NAME_KEYWORDS = {"금융", "은행", "보험", "증권", "캐피탈", "저축", "파이낸셜", "지주"}
+HOLDING_NAME_KEYWORDS = {"홀딩스", "홀딩", "지주"}
 
 
 # --- Magic Formula 계산 ---
@@ -200,11 +201,6 @@ def load_stocks_from_db(bsns_year, db_path=DB_PATH):
             continue
         if any(kw in name for kw in FINANCIAL_NAME_KEYWORDS):
             continue
-        # ROE = 당기순이익 / 자기자본(총자산 - 총부채)
-        equity = (r["total_assets"] or 0) - (r["total_debt"] or 0)
-        net_income = r["net_income"] or 0
-        roe = net_income / equity if equity > 0 and net_income else None
-
         stocks.append({
             "stock_code": r["stock_code"],
             "name": r["name"],
@@ -216,8 +212,6 @@ def load_stocks_from_db(bsns_year, db_path=DB_PATH):
             "market_cap": r["market_cap"],
             "total_debt": r["total_debt"] or 0,
             "revenue": r["revenue"] or 0,
-            "per": r["per"],
-            "roe": round(roe, 4) if roe is not None else None,
         })
     return stocks
 
@@ -231,44 +225,13 @@ def print_magic_formula(bsns_year, top_n=30):
     print(f" Magic Formula Top {top_n} — {bsns_year}")
     print(f"{'='*80}")
     print(f"{'순위':>4} {'종목명':<16} {'매출(억)':>10} {'영업이익(억)':>12} "
-          f"{'ROIC':>8} {'EY':>8} {'합산':>6} {'PER':>8} {'ROE':>8}")
-    print("-" * 100)
+          f"{'ROIC':>8} {'EY':>8} {'합산':>6}")
+    print("-" * 80)
 
     for i, s in enumerate(ranked[:top_n], 1):
-        per_str = f"{s['per']:.1f}" if s.get('per') else "-"
-        roe_str = f"{s['roe']:.1%}" if s.get('roe') is not None else "-"
         print(f"{i:>4} {s['name']:<16} {s.get('revenue',0)/1e8:>10,.0f} "
               f"{s['ebit']/1e8:>12,.0f} {s['roic']:>8.1%} "
-              f"{s['earnings_yield']:>8.1%} {s['magic_rank']:>6} "
-              f"{per_str:>8} {roe_str:>8}")
-
-
-def save_magic_formula_md(bsns_year, top_n=50):
-    """마법공식 상위 종목을 마크다운 파일로 저장."""
-    stocks = load_stocks_from_db(bsns_year)
-    ranked = rank_stocks(stocks)
-
-    lines = [
-        f"# Magic Formula Top {top_n} — {bsns_year}",
-        f"",
-        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | ROIC | EY | 합산 | PER | ROE |",
-        "|-----:|:------:|:------|--------:|-----------:|-----:|---:|-----:|----:|----:|",
-    ]
-    for i, s in enumerate(ranked[:top_n], 1):
-        per_str = f"{s['per']:.1f}" if s.get('per') else "-"
-        roe_str = f"{s['roe']:.1%}" if s.get('roe') is not None else "-"
-        lines.append(
-            f"| {i} | {s['stock_code']} | {s['name']} "
-            f"| {s.get('revenue',0)/1e8:,.0f} | {s['ebit']/1e8:,.0f} "
-            f"| {s['roic']:.1%} | {s['earnings_yield']:.1%} | {s['magic_rank']} "
-            f"| {per_str} | {roe_str} |"
-        )
-
-    path = os.path.join(os.path.dirname(__file__), f"magic_formula_{bsns_year}.md")
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    print(f"저장: {path}")
-    return path
+              f"{s['earnings_yield']:>8.1%} {s['magic_rank']:>6}")
 
 
 def load_stock_financials(stock_code, bsns_year, db_path=DB_PATH):
@@ -346,6 +309,8 @@ def load_all_stocks_for_dcf(bsns_year, db_path=DB_PATH):
             continue
         if any(kw in name for kw in FINANCIAL_NAME_KEYWORDS):
             continue
+        if any(kw in name for kw in HOLDING_NAME_KEYWORDS):
+            continue
         stocks.append(dict(r))
     return stocks
 
@@ -370,11 +335,6 @@ def screen_dcf(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10,
         if dcf["fcf"] <= 0:
             continue
 
-        # ROE = 당기순이익 / 자기자본(총자산 - 총부채)
-        equity = (s.get("total_assets") or 0) - (s.get("total_debt") or 0)
-        net_income = s.get("net_income") or 0
-        roe = net_income / equity if equity > 0 and net_income else None
-
         results.append({
             "stock_code": stock_code,
             "name": s["name"],
@@ -386,8 +346,6 @@ def screen_dcf(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10,
             "current_price": dcf["current_price"],
             "upside": dcf["upside"],
             "fcf_method": dcf["fcf_method"],
-            "per": s.get("per"),
-            "roe": round(roe, 4) if roe is not None else None,
         })
 
     # upside 높은 순 정렬
@@ -400,21 +358,18 @@ def print_dcf_screen(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
     results = screen_dcf(bsns_year, top_n=top_n, growth_rate=growth_rate,
                          wacc=wacc)
 
-    print(f"\n{'='*120}")
+    print(f"\n{'='*100}")
     print(f" DCF Top {top_n} — {bsns_year} (growth={growth_rate:.0%}, WACC={wacc:.0%})")
-    print(f"{'='*120}")
+    print(f"{'='*100}")
     print(f"{'순위':>4} {'종목코드':>8} {'종목명':<16} {'매출(억)':>10} {'영업이익(억)':>12} "
-          f"{'FCF(억)':>10} {'적정가':>10} {'현재가':>10} {'괴리율':>8} {'PER':>8} {'ROE':>8}")
-    print("-" * 120)
+          f"{'FCF(억)':>10} {'적정가':>10} {'현재가':>10} {'괴리율':>8}")
+    print("-" * 100)
 
     for i, r in enumerate(results, 1):
-        per_str = f"{r['per']:.1f}" if r.get('per') else "-"
-        roe_str = f"{r['roe']:.1%}" if r.get('roe') else "-"
         print(f"{i:>4} {r['stock_code']:>8} {r['name']:<16} "
               f"{r['revenue']/1e8:>10,.0f} {r['operating_income']/1e8:>12,.0f} "
               f"{r['fcf']/1e8:>10,.0f} {r['dcf_price']:>10,.0f} "
-              f"{r['current_price']:>10,.0f} {r['upside']:>8.1%} "
-              f"{per_str:>8} {roe_str:>8}")
+              f"{r['current_price']:>10,.0f} {r['upside']:>8.1%}")
 
 
 def save_dcf_screen_md(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
@@ -427,18 +382,15 @@ def save_dcf_screen_md(bsns_year, top_n=50, growth_rate=0.05, wacc=0.10):
         f"",
         f"> 가정: 성장률 {growth_rate:.0%}, WACC {wacc:.0%}, 영구성장률 2%, 예측기간 5년",
         f"",
-        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | FCF(억) | 적정가 | 현재가 | 괴리율 | PER | ROE |",
-        "|-----:|:------:|:------|--------:|-----------:|-------:|------:|------:|------:|----:|----:|",
+        "| 순위 | 종목코드 | 종목명 | 매출(억) | 영업이익(억) | FCF(억) | 적정가 | 현재가 | 괴리율 |",
+        "|-----:|:------:|:------|--------:|-----------:|-------:|------:|------:|------:|",
     ]
     for i, r in enumerate(results, 1):
-        per_str = f"{r['per']:.1f}" if r.get('per') else "-"
-        roe_str = f"{r['roe']:.1%}" if r.get('roe') else "-"
         lines.append(
             f"| {i} | {r['stock_code']} | {r['name']} "
             f"| {r['revenue']/1e8:,.0f} | {r['operating_income']/1e8:,.0f} "
             f"| {r['fcf']/1e8:,.0f} | {r['dcf_price']:,.0f} "
-            f"| {r['current_price']:,.0f} | {r['upside']:.1%} "
-            f"| {per_str} | {roe_str} |"
+            f"| {r['current_price']:,.0f} | {r['upside']:.1%} |"
         )
 
     path = os.path.join(os.path.dirname(__file__), f"dcf_{bsns_year}.md")
@@ -462,4 +414,3 @@ if __name__ == "__main__":
     else:
         year = sys.argv[1] if len(sys.argv) > 1 else "2024"
         print_magic_formula(year)
-        save_magic_formula_md(year)
