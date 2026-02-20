@@ -26,6 +26,10 @@ a.sc:hover { text-decoration: underline; }
 a.sn { color: #1a73e8; text-decoration: none; }
 a.sn:hover { text-decoration: underline; }
 .pos { color: #c0392b; }
+.formulas { margin-top: 32px; padding: 20px; background: #fff; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; line-height: 1.8; }
+.formulas h2 { font-size: 16px; margin-bottom: 12px; }
+.formulas h3 { font-size: 14px; margin-top: 16px; margin-bottom: 4px; color: #555; }
+.formulas code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 .filters { margin: 12px 0; display: flex; gap: 12px; align-items: center; }
 .filters label { font-size: 13px; cursor: pointer; user-select: none; }
 .filters input[type="checkbox"] { margin-right: 4px; }
@@ -54,9 +58,6 @@ a.sn:hover { text-decoration: underline; }
     <tbody id="tb-total25"></tbody>
   </table>
   <p class="note">Ultra·DCF·Magic Formula 2025 각 전략 순위 합산 (미포함 종목은 101위 처리) | 2025년 3분기 기준</p>
-  <p class="note">Ultra: 강환국 울트라 전략 — 12개 지표 백분위 순위 합산 + 신F-스코어(≥3) 필터</p>
-  <p class="note">DCF: 성장률 5%, WACC 10%, 영구성장률 2%, 예측기간 5년 — FCF 기반 적정가 괴리율 순</p>
-  <p class="note">MF: 마법공식 — ROIC + Earnings Yield 순위 합산</p>
 </div>
 
 <div id="ultra25" class="tab-content">
@@ -97,6 +98,21 @@ a.sn:hover { text-decoration: underline; }
     <tbody id="tb-mf24"></tbody>
   </table>
   <p class="note">2024년 사업보고서 기준</p>
+</div>
+
+<div class="formulas">
+  <h2>공식 요약</h2>
+  <h3>Ultra (강환국 울트라 전략)</h3>
+  <code>12개 지표(1/PER, 1/PBR, 1/PSR, 1/PFCR, GP/A, 자산성장률, 영업이익/차입금, 영업이익 QoQ/YoY, 순이익 QoQ/YoY, 변동성)</code><br>
+  <code>백분위 순위 합산 + 신F-스코어(≥3) 필터</code>
+  <h3>DCF (Discounted Cash Flow)</h3>
+  <code>FCF = 영업활동현금흐름 - CAPEX</code><br>
+  <code>적정가 = (미래 FCF의 현재가치 합 + 잔존가치) - 부채 + 현금) / 발행주식수</code><br>
+  <code>괴리율 = (적정가 - 현재가) / 현재가</code>
+  <h3>Magic Formula (조엘 그린블라트)</h3>
+  <code>ROIC = EBIT / 투하자본</code> (투하자본 = 유동자산 - 유동부채 - 현금 + 유형자산)<br>
+  <code>EY = EBIT / EV</code> (EV = 시가총액 + 부채 - 현금)<br>
+  <code>순위 = ROIC 순위 + EY 순위</code> (낮을수록 상위)
 </div>
 
 </div>
