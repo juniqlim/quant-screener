@@ -1,6 +1,6 @@
 __pycache__/
 .venv/
 .pytest_cache/
-*.db
+!magic_formula.db
 *.log
 docs_cache/
